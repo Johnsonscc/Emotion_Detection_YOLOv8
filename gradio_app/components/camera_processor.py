@@ -33,28 +33,18 @@ class CameraProcessor:
             traceback.print_exc()
             return self.renderer.error_image()
 
-    def process_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
-        """处理单帧图像 (兼容Gradio 3.x的numpy输入)"""
-        if frame is None or frame.size == 0:
-            return None
-
+    def process_frame(self, frame):
         try:
-            # 新版本Gradio可能直接传入BGR格式
-            if frame.shape[2] == 3:  # 确保是彩色图像
-                if np.max(frame) > 1:  # 处理0-255范围的图像
-                    frame = frame.astype(np.uint8)
-                else:  # 处理0-1范围的图像
-                    frame = (frame * 255).astype(np.uint8)
+            processed = self._preprocess(frame)
+            detections = self.model.predict(processed)
 
-            # 统一转换为BGR格式
-            if len(frame.shape) == 3:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            if not detections:  # 无检测时返回原始帧
+                return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # 继续原有处理流程...
-            return cv2.resize(frame, tuple(self.config["target_size"]))
+            return self.renderer.render(processed, detections)
         except Exception as e:
-            print(f"[CameraProcessor] 帧处理失败: {str(e)}")
-            return None
+            print(f"处理错误: {e}")
+            return self.renderer.error_image()
 
     def _auto_white_balance(self, img: np.ndarray) -> np.ndarray:
         """自动白平衡算法"""

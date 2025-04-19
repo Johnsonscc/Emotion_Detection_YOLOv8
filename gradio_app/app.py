@@ -120,22 +120,21 @@ class EmotionDetectionApp:
         finally:
             cap.release()
 
-    def _process_frame(self, input_data):
-        """处理视频帧的完整流水线（正确的方法位置）"""
-        if not self.state.state.running_flag:  # 修正状态访问路径
-            return None
+    def _process_frame(self, frame):
         try:
-            if isinstance(input_data, np.ndarray):  # 摄像头处理
-                preprocessed = self.camera.process_frame(input_data)
-            elif hasattr(input_data, "name"):  # 上传文件处理
-                preprocessed = self._process_upload(input_data)
-            else:
-                raise ValueError("未知输入类型")
-            detections = self.model.predict(preprocessed)
-            return self.renderer.render(preprocessed, detections)
+            if frame is None:
+                return self.renderer.error_image("No frame input")
+
+            # 添加维度检查
+            if len(frame.shape) != 3 or frame.shape[2] != 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+
+            processed = self.camera.process_frame(frame)
+            detections = self.model.predict(processed)
+            return self.renderer.render(processed, detections)
         except Exception as e:
-            print(f"处理失败: {str(e)}")  # 替换错误日志方式
-            return self.renderer.error_image()
+            print(f"Pipeline error: {str(e)}")
+            return self.renderer.error_image(f"Error: {type(e).__name__}")
 
     def _process_upload(self, file_obj):
         """处理文件上传（独立的方法定义）"""
@@ -166,6 +165,4 @@ if __name__ == "__main__":
     app.create_interface().launch(
         server_port=7860,
         share=False,
-        show_error=True,    # 显示详细错误
-        debug=True          # 调试模式
     )

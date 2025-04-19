@@ -3,61 +3,64 @@ import numpy as np
 from typing import Tuple
 
 
-def preprocess(
-        img: np.ndarray,
-        target_size: Tuple[int, int] = (224, 224),
-        do_clahe: bool = True
-) -> np.ndarray:
-    """标准化图像预处理流程
-    Args:
-        img: 输入图像 (BGR格式)
-        target_size: 目标尺寸
-        do_clahe: 是否使用自适应直方图均衡
-    Returns:
-        预处理后的图像 (RGB格式)
-    """
-    # 1. 自动白平衡
-    img = auto_white_balance(img)
+class ImagePreprocessor:
+    def __init__(self,
+                 target_size: Tuple[int, int] = (640, 640),
+                 normalize: bool = True):
+        """
+        图像预处理模块
 
-    # 2. 人脸对齐 (可选)
-    img = align_face(img) if needs_alignment(img) else img
+        参数:
+            target_size: 目标输入尺寸 (H,W)
+            normalize: 是否执行归一化
+        """
+        self.target_size = target_size
+        self.normalize = normalize
 
-    # 3. 调整尺寸
-    img = cv2.resize(img, target_size)
+    def process(self, frame: np.ndarray) -> np.ndarray:
+        """
+        完整预处理流水线：
+        1. BGR转RGB
+        2. 调整尺寸并保持比例填充
+        3. 归一化
+        4. 转换为torch tensor
+        """
+        # 颜色空间转换
+        rgb_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # 4. 对比度增强
-    if do_clahe:
-        img = apply_clahe(img)
+        # 尺寸调整
+        resized_img = self._letterbox(rgb_img)
 
-    # 5. 归一化
-    img = img.astype(np.float32) / 255.0
+        # 归一化
+        if self.normalize:
+            resized_img = resized_img.astype(np.float32) / 255.0
 
-    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # 维度调整 (H,W,C) -> (C,H,W)
+        tensor_img = resized_img.transpose(2, 0, 1)
+        tensor_img = np.expand_dims(tensor_img, axis=0)  # 添加batch维度
 
+        return torch.from_numpy(tensor_img).to(self.device)
 
-def auto_white_balance(img: np.ndarray) -> np.ndarray:
-    """自动白平衡 (基于灰度世界假设)"""
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-    avg_a = np.mean(a)
-    avg_b = np.mean(b)
-    a = a - ((avg_a - 128) * 1.1)
-    b = b - ((avg_b - 128) * 1.1)
-    lab = cv2.merge([l, a, b])
-    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    def _letterbox(self, img: np.ndarray) -> np.ndarray:
+        """自适应的尺寸调整方法"""
+        h, w = self.target_size
+        ih, iw = img.shape[:2]
 
+        # 计算缩放比例
+        scale = min(w / iw, h / ih)  # 选择较小比例尺寸
+        nw, nh = int(iw * scale), int(ih * scale)
 
-def apply_clahe(img: np.ndarray) -> np.ndarray:
-    """限制对比度自适应直方图均衡化"""
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    l = clahe.apply(l)
-    lab = cv2.merge([l, a, b])
-    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        # 调整图像尺寸
+        resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
 
+        # 创建空画布
+        canvas = np.full((h, w, 3), 114, dtype=np.uint8)
 
-def needs_alignment(img: np.ndarray) -> bool:
-    """判断是否需要人脸对齐"""
-    # 实现基于面部关键点检测的逻辑
-    return False  # 简化示例
+        # 计算填充位置
+        dx = (w - nw) // 2
+        dy = (h - nh) // 2
+
+        # 将调整后的图像放入画布中心
+        canvas[dy:dy + nh, dx:dx + nw] = resized
+
+        return canvas

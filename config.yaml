@@ -11,6 +11,14 @@ model:
   confidence_thresh: 0.6         # 置信度阈值
   iou_thresh: 0.45               # 非极大值抑制阈值
 
+preprocessing:
+  target_size: [640, 640]
+  normalize: true
+visualization:
+  bbox_color: [0, 255, 0]
+  text_color: [0, 0, 255]
+  font_scale: 0.8
+
 # 界面配置
 ui:
   theme: "dark"                  # 界面主题 (light/dark)
@@ -22,3 +30,12 @@ camera:
   device_id: 0                   # 摄像头设备号
   resolution: [640, 480]         # 采集分辨率
   auto_exposure: true            # 自动曝光
+
+debug:
+  strict_mode: False  # 设为True时进行严格维度检查
+  log_raw_output: False  # 记录原始模型输出
+
+#网络配置
+network:
+  force_localhost: true  # 强制使用本地地址
+  disable_telemetry: true  # 禁用遥测
