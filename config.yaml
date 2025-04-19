@@ -1,0 +1,24 @@
+# 系统基础配置
+system:
+  max_threads: 4                 # 最大并行线程数
+  gpu_id: 0                      # 使用的GPU编号
+  log_level: "INFO"              # 日志级别 (DEBUG/INFO/WARNING)
+
+# 模型配置
+model:
+  path: "models/yolov8n-emo.pt"  # 模型权重路径
+  input_size: [224, 224]         # 输入图像尺寸
+  confidence_thresh: 0.6         # 置信度阈值
+  iou_thresh: 0.45               # 非极大值抑制阈值
+
+# 界面配置
+ui:
+  theme: "dark"                  # 界面主题 (light/dark)
+  default_fps: 15                # 默认帧率
+  enable_audio: false            # 是否启用声音提示
+
+# 摄像头配置
+camera:
+  device_id: 0                   # 摄像头设备号
+  resolution: [640, 480]         # 采集分辨率
+  auto_exposure: true            # 自动曝光
