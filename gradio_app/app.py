@@ -1,8 +1,12 @@
+import matplotlib
+matplotlib.use('Agg')  # 强制禁用 matplotlib 图形绘制
 import gradio as gr
 import numpy as np
 import cv2
+import yaml
+import traceback
 from pathlib import Path
-from typing import Iterator, Optional  # 新增导入
+from typing import Iterator, Optional
 from layouts import assemble_layout
 from components import (
     CameraProcessor,
@@ -10,9 +14,10 @@ from components import (
     StateManager,
     ModelLoader
 )
-import yaml
+
 class EmotionDetectionApp:
-    """表情识别主应用类"""
+    """表情识别主应用类（已修复参数不匹配错误）"""
+
     def __init__(self, config_path: str = "config/ui_config.yaml"):
         # 加载配置
         self.config = self._load_config(config_path)
@@ -23,10 +28,9 @@ class EmotionDetectionApp:
         self.camera = CameraProcessor(self.config["camera"])
         self.renderer = ResultRenderer()
 
-        # 加载模型
-        self.model = self.model_loader.load_model(
-            Path("/Users/johnson/Desktop/Joh/Machine_Learning/Emotion_Detection_YOLOv8/models") / self.config["model"]["path"]
-        )
+        # 加载模型（确保使用正确的YOLO加载方式）
+        model_path = Path("/Users/johnson/Desktop/Joh/Machine_Learning/Emotion_Detection_YOLOv8/models") / self.config["model"]["path"]
+        self.model = self.model_loader.load_model(model_path)
 
     def _load_config(self, config_path: str) -> dict:
         """加载配置文件"""
@@ -34,16 +38,16 @@ class EmotionDetectionApp:
             return yaml.safe_load(f)
 
     def create_interface(self):
-        """构建Gradio界面"""
+        """构建Gradio界面（修复事件绑定）"""
         with gr.Blocks(
                 title=self.config["app"]["title"],
                 css=self._get_css(),
                 theme=gr.themes.Soft()
         ) as demo:
-            # 1. 组装布局
+            # 组装布局
             layout = assemble_layout(self.state)
 
-            # 2. 事件绑定
+            # 事件绑定（关键修复点）
             self._bind_events(layout)
 
         return demo
@@ -54,33 +58,32 @@ class EmotionDetectionApp:
             return f.read()
 
     def _bind_events(self, layout):
-        """统一事件绑定方法"""
-        # 摄像头实时处理
-        layout["input_panel"]["webcam"].change(
-            self._process_camera,
+        """修复版事件绑定方法"""
+        # ===== 实时摄像头流处理 =====
+        layout["input_panel"]["webcam"].stream(  # 使用stream事件
+            self._process_camera_frame,  # 处理单帧
             inputs=layout["input_panel"]["webcam"],
             outputs=layout["output_panel"]["result_image"]
         )
 
-        # 图片上传处理
+        # ===== 图片上传处理 =====
         layout["input_panel"]["upload_image"].upload(
-            self._process_image,
+            self._process_upload_image,  # 简化参数
             inputs=layout["input_panel"]["upload_image"],
             outputs=layout["output_panel"]["result_image"]
         )
 
-        # 视频上传处理
+        # ===== 视频上传处理 =====
         layout["input_panel"]["upload_video"].upload(
-            self._process_video,
+            self._process_video_stream,  # 使用正确的生成器
             inputs=layout["input_panel"]["upload_video"],
             outputs=layout["output_panel"]["result_image"]
         )
 
-
-    def _process_camera(self, frame: np.ndarray) -> np.ndarray:
-        """处理摄像头连续输入"""
+    def _process_camera_frame(self, frame: np.ndarray) -> np.ndarray:
+        """处理摄像头单帧输入（参数适配）"""
         if not self.state.state.running_flag:
-            return None
+            return np.zeros((480, 640, 3), dtype=np.uint8)
 
         try:
             processed = self.camera.process_frame(frame)
@@ -90,79 +93,61 @@ class EmotionDetectionApp:
             print(f"Camera error: {str(e)}")
             return self.renderer.error_image()
 
-    def _process_image(self, file_path: str) -> np.ndarray:
-        """处理单张图片上传"""
+    def _process_upload_image(self, file_path: str) -> np.ndarray:  # ✔️ 参数改为字符串
+        """正确接收文件路径"""
         try:
-            image = cv2.imread(file_path)
-            detections = self.model.predict(image)
-            return self.renderer.render(image, detections)
+            if not file_path:
+                return self.renderer.error_image("空文件路径")
+
+            # 直接使用字符串路径
+            img = cv2.imread(file_path)
+            if img is None:
+                raise ValueError(f"无法读取图片: {file_path}")
+
+            detections = self.model.predict(img)
+            return self.renderer.render(img, detections)
         except Exception as e:
-            print(f"Image error: {str(e)}")
+            print(f"Image processing error: {str(e)}")
             return self.renderer.error_image()
 
-    def _process_video(self, video_path: str) -> Iterator[Optional[np.ndarray]]:
-        """处理视频逐帧解析（修复类型标注）"""
+    def _process_video_stream(self, video_path: str) -> Iterator[np.ndarray]:
+        """生成器方式处理视频流（修复迭代问题）"""
         cap = cv2.VideoCapture(video_path)
+        self.state.state.running_flag = True
 
-        # 添加视频文件打开校验
-        if not cap.isOpened():
-            print(f"[ERROR] 无法打开视频文件: {video_path}")
-            yield self.renderer.error_image()
-            return
         try:
-            while self.state.state.running_flag:
+            while self.state.state.running_flag and cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
+
                 processed = self.camera.process_frame(frame)
-                detections = self.model.predict(processed)
+                detections = self.model.predict(processed, verbose=True)  # 显式启用 verbose
                 yield self.renderer.render(processed, detections)
         finally:
             cap.release()
+            self.state.state.running_flag = False
+            print("✅ 视频处理完成")
 
-    def _process_frame(self, frame):
-        try:
-            if frame is None:
-                return self.renderer.error_image("No frame input")
-
-            # 添加维度检查
-            if len(frame.shape) != 3 or frame.shape[2] != 3:
-                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-
-            processed = self.camera.process_frame(frame)
-            detections = self.model.predict(processed)
-            return self.renderer.render(processed, detections)
-        except Exception as e:
-            print(f"Pipeline error: {str(e)}")
-            return self.renderer.error_image(f"Error: {type(e).__name__}")
-
-    def _process_upload(self, file_obj):
-        """处理文件上传（独立的方法定义）"""
-        if file_obj.name.endswith(('.png', '.jpg', '.jpeg')):
-            return cv2.imread(file_obj.name)
-        elif file_obj.name.endswith(('.mp4', '.avi')):
-            cap = cv2.VideoCapture(file_obj.name)
-            ret, frame = cap.read()
-            cap.release()
-            return frame if ret else None
-        return None
-
-    # 在 EmotionDetectionApp 类中添加
     def _check_button_state(self):
-        """同步按钮状态的条件检查"""
+        """统一状态管理"""
         valid_model = self.model is not None
-        valid_input = (
-                self.state.state.input_type in
-                ["实时摄像头", "图片上传", "视频文件"]
-        )
-        return gr.Button.update(
-            interactive=valid_model and valid_input
-        )
+        valid_input = self.state.state.input_type in ["实时摄像头", "图片上传", "视频文件"]
+        return gr.Button.update(interactive=valid_model and valid_input)
 
 
 if __name__ == "__main__":
     app = EmotionDetectionApp()
-    app.create_interface().launch(
-        server_port=7860,
-        share=False,
-    )
+    interface = app.create_interface()
+
+    # 启动参数（推荐设置max_threads）
+    try:
+        # 你的主要代码逻辑
+        interface.launch(
+            server_port=7860,
+            share=False,
+            max_threads=4
+        )
+    except Exception as e:
+        print(f"发生错误: {str(e)}")
+        traceback.print_exc()

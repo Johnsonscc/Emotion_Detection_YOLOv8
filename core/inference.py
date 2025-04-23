@@ -1,88 +1,80 @@
 import cv2
 import torch
 import numpy as np
-from PIL import Image
-from typing import List, Dict, Optional
-from .preprocess import ImagePreprocessor
-from .postprocess import ResultPostprocessor
+from typing import List, Dict, Optional, Tuple
+from preprocess import ImagePreprocessor
 
 
 class EmotionInference:
     def __init__(self,
                  model_path: str,
                  device: Optional[str] = None,
-                 conf_threshold: float = 0.5):
-        """
-        初始化表情识别推理器
+                 conf_threshold: float = 0.5,
+                 input_size: Tuple[int, int] = (640, 640)):
 
-        参数:
-            model_path: 模型权重路径(.pt)
-            device: 指定推理设备('cuda'/'cpu')
-            conf_threshold: 识别置信度阈值
-        """
+        self.class_names = ['angry', 'happy', 'neutral', 'sad', 'surprise']
+        self.conf_threshold = conf_threshold
+        self.input_size = input_size
         self.device = self._select_device(device)
         self.model = self._load_model(model_path)
-        self.conf_threshold = conf_threshold
-        self.class_names = ['angry', 'happy', 'neutral', 'sad', 'surprise']
-        self.preprocessor = ImagePreprocessor()
-        self.postprocessor = ResultPostprocessor()
 
     def _select_device(self, device: Optional[str]) -> str:
-        """自动选择可用设备"""
-        if device is None:
-            return 'cuda' if torch.cuda.is_available() else 'cpu'
-        return device
+        return device if device else 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-    def _load_model(self, model_path: str) -> torch.nn.Module:
-        """加载YOLOv8模型"""
+    def _load_model(self, model_path: str):
         try:
-            model = torch.hub.load('ultralytics/yolov8',
-                                   'custom',
-                                   path=model_path,
-                                   force_reload=True)
+            from ultralytics import YOLO
+            model = YOLO(model_path)
             model.to(self.device)
-            model.eval()
+            print(f"✅ 模型加载成功 | 设备: {self.device}")
             return model
         except Exception as e:
             raise RuntimeError(f"模型加载失败: {str(e)}")
 
-    def predict(self, img: np.ndarray, conf_thresh: float = 0.5) -> List[Dict]:
-        try:
-            # 输入验证
-            if img is None or not isinstance(img, np.ndarray):
-                return []
-
-            # 统一图像格式
-            if len(img.shape) == 2:  # 灰度图转BGR
-                img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-            elif img.shape[2] == 4:  # 带透明度通道
-                img = img[:, :, :3]
-
-            # 模型推理
-            results = self.model(img, imgsz=224, conf=conf_thresh)
-
-            # 结果解析
-            detections = []
-            for result in results:
-                if not hasattr(result, 'boxes') or result.boxes is None:
-                    continue
-
-                boxes = result.boxes.cpu().numpy()  # 确保转为numpy
-                for box in (boxes if boxes.ndim > 1 else [boxes]):  # 处理单检测情况
-                    detections.append({
-                        'bbox': box.xywh[0].tolist() if box.xywh.ndim > 1 else box.xywh.tolist(),
-                        'label': self.classes[int(box.cls)],
-                        'conf': float(box.conf),
-                    })
-            return detections
-        except Exception as e:
-            print(f"[ERROR] Prediction failed: {str(e)}")
+    def predict(self, img: np.ndarray) -> List[Dict]:
+        if img is None or img.size == 0:
             return []
 
-    def warmup(self, img_size=(640, 640)):
-        """GPU预热"""
-        if 'cuda' in self.device:
-            img = torch.zeros((1, 3, *img_size),
-                              device=self.device)
-            for _ in range(3):
-                self.model(img)
+        # 确保图像是 NumPy 格式
+        if isinstance(img, torch.Tensor):
+            img = img.permute(1, 2, 0).cpu().numpy()
+
+        h, w = img.shape[:2]
+        results = self.model.predict(
+            source=img,
+            imgsz=self.input_size,
+            conf=self.conf_threshold,
+            device=self.device,
+            verbose=False,
+            show=False,
+            save=False
+        )
+
+        detections = []
+        for result in results:
+            if result.boxes is None or result.boxes.shape[0] == 0:
+                continue
+
+            boxes = result.boxes.xywhn.cpu().numpy()
+            confs = result.boxes.conf.cpu().numpy()
+            cls_ids = result.boxes.cls.cpu().numpy().astype(int)
+
+            for i in range(len(boxes)):
+                x_center, y_center, width, height = boxes[i]
+                x1 = int((x_center - width / 2) * w)
+                y1 = int((y_center - height / 2) * h)
+                x2 = int((x_center + width / 2) * w)
+                y2 = int((y_center + height / 2) * h)
+
+                x1 = max(0, min(x1, w - 1))
+                y1 = max(0, min(y1, h - 1))
+                x2 = max(x1 + 1, min(x2, w - 1))
+                y2 = max(y1 + 1, min(y2, h - 1))
+
+                detections.append({
+                    'bbox': [x1, y1, x2 - x1, y2 - y1],
+                    'label': self.class_names[cls_ids[i]],
+                    'conf': float(confs[i])
+                })
+
+        return detections

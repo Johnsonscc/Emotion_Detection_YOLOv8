@@ -1,7 +1,6 @@
 import gradio as gr
 import pandas as pd
 
-
 def create() -> dict:
     """创建结果展示面板"""
     with gr.Column(variant="panel"):
@@ -19,9 +18,12 @@ def create() -> dict:
                 row_count=5
             )
 
-        # 历史统计
+        # 历史统计 - 使用 gr.Image() 显示图表
         with gr.Tab("趋势分析"):
-            plot = gr.Plot(label="表情分布变化")
+            plot = gr.Image(
+                label="表情分布变化",  # 这里用图像展示趋势图
+                interactive=False  # 不需要交互
+            )
 
     return {
         "result_image": result_image,

@@ -36,15 +36,21 @@ class CameraProcessor:
     def process_frame(self, frame):
         try:
             processed = self._preprocess(frame)
+
+            # 确保图像是三通道（BGR），如果是灰度图转换为 BGR
+            if processed.ndim == 2 or processed.shape[-1] != 3:
+                processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+
+            # 确保是 NumPy 数组，不是 Tensor
+            if isinstance(processed, torch.Tensor):
+                processed = processed.permute(1, 2, 0).cpu().numpy()
+
             detections = self.model.predict(processed)
 
-            if not detections:  # 无检测时返回原始帧
-                return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            return self.renderer.render(processed, detections)
+            return detections
         except Exception as e:
             print(f"处理错误: {e}")
-            return self.renderer.error_image()
+            return None
 
     def _auto_white_balance(self, img: np.ndarray) -> np.ndarray:
         """自动白平衡算法"""

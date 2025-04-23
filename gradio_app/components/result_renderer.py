@@ -30,19 +30,21 @@ class ResultRenderer:
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     def _draw_detection(self, img: np.ndarray, detection: Dict) -> np.ndarray:
-        """绘制单个检测结果"""
-        color = self.COLOR_MAP[detection["label"]]
-        x, y, w, h = detection["bbox"]
+        label = detection["label"]
+        color = self.COLOR_MAP.get(label, (0, 255, 0))
 
-        # 绘制边界框
+        # 安全转换 bbox
+        bbox = detection["bbox"]
+        if hasattr(bbox, "cpu"):  # torch.Tensor
+            bbox = bbox.cpu().numpy().tolist()
+        x, y, w, h = map(int, bbox)
+
         cv2.rectangle(img, (x, y), (x + w, y + h), color, self.thickness)
 
-        # 绘制标签
-        label = f"{detection['label']}: {detection['conf']:.2f}"
-        (tw, th), _ = cv2.getTextSize(label, self.font, self.font_scale, self.thickness)
+        text = f"{label}: {detection.get('conf', 0):.2f}"
+        (tw, th), _ = cv2.getTextSize(text, self.font, self.font_scale, self.thickness)
         cv2.rectangle(img, (x, y - th - 5), (x + tw, y), color, -1)
-        cv2.putText(img, label, (x, y - 5), self.font,
-                    self.font_scale, (255, 255, 255), self.thickness)
+        cv2.putText(img, text, (x, y - 5), self.font, self.font_scale, (255, 255, 255), self.thickness)
 
         return img
 

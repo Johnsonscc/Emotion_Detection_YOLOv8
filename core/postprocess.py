@@ -13,6 +13,9 @@ class ResultPostprocessor:
         2. 非极大值抑制(NMS)
         3. 格式转换
         """
+        # 添加类型检查
+        if isinstance(raw_output, torch.Tensor):
+            raw_output = raw_output.cpu().numpy()
         # 初步过滤
         valid_detections = raw_output[raw_output[:, 4] > conf_threshold]
 

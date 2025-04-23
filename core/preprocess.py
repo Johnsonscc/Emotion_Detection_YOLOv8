@@ -4,63 +4,43 @@ from typing import Tuple
 
 
 class ImagePreprocessor:
-    def __init__(self,
-                 target_size: Tuple[int, int] = (640, 640),
-                 normalize: bool = True):
+    def __init__(self, input_size: Tuple[int, int] = (640, 640)):
+        self.input_size = input_size
+
+    def resize(self, img: np.ndarray) -> np.ndarray:
+        """仅用于非YOLOv8模型的resize"""
+        return cv2.resize(img, self.input_size)
+
+    def process(self, img: np.ndarray) -> np.ndarray:
         """
-        图像预处理模块
+        完整的图像预处理流程：
+        1. BGR转RGB
+        2. Resize
+        3. 归一化 [0,255] -> [0,1]
+        4. 通道重排 HWC -> CHW
 
         参数:
-            target_size: 目标输入尺寸 (H,W)
-            normalize: 是否执行归一化
+            img: 输入BGR图像 (H,W,3)
+
+        返回:
+            processed_img: 预处理后的图像 (3,H,W)
         """
-        self.target_size = target_size
-        self.normalize = normalize
+        # 输入校验
+        if img is None or img.size == 0:
+            raise ValueError("输入图像不能为空")
 
-    def process(self, frame: np.ndarray) -> np.ndarray:
-        """
-        完整预处理流水线：
-        1. BGR转RGB
-        2. 调整尺寸并保持比例填充
-        3. 归一化
-        4. 转换为torch tensor
-        """
-        # 颜色空间转换
-        rgb_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # 1. BGR转RGB
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # 尺寸调整
-        resized_img = self._letterbox(rgb_img)
+        # 2. Resize (保持宽高比)
+        h, w = img.shape[:2]
+        scale = min(self.input_size[1] / h, self.input_size[0] / w)
+        new_h, new_w = int(h * scale), int(w * scale)
 
-        # 归一化
-        if self.normalize:
-            resized_img = resized_img.astype(np.float32) / 255.0
+        resized = cv2.resize(img_rgb, (new_w, new_h))
 
-        # 维度调整 (H,W,C) -> (C,H,W)
-        tensor_img = resized_img.transpose(2, 0, 1)
-        tensor_img = np.expand_dims(tensor_img, axis=0)  # 添加batch维度
+        # 3. 归一化
+        normalized = resized.astype(np.float32) / 255.0
 
-        return torch.from_numpy(tensor_img).to(self.device)
-
-    def _letterbox(self, img: np.ndarray) -> np.ndarray:
-        """自适应的尺寸调整方法"""
-        h, w = self.target_size
-        ih, iw = img.shape[:2]
-
-        # 计算缩放比例
-        scale = min(w / iw, h / ih)  # 选择较小比例尺寸
-        nw, nh = int(iw * scale), int(ih * scale)
-
-        # 调整图像尺寸
-        resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
-
-        # 创建空画布
-        canvas = np.full((h, w, 3), 114, dtype=np.uint8)
-
-        # 计算填充位置
-        dx = (w - nw) // 2
-        dy = (h - nh) // 2
-
-        # 将调整后的图像放入画布中心
-        canvas[dy:dy + nh, dx:dx + nw] = resized
-
-        return canvas
+        # 4. 通道重排 HWC -> CHW
+        return np.transpose(normalized, (2, 0, 1))

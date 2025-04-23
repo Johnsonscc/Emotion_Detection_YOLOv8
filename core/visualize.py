@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 from typing import List, Dict
 
 
@@ -9,55 +10,42 @@ class ResultVisualizer:
                  text_color: tuple = (0, 0, 255),
                  font_scale: float = 0.8,
                  thickness: int = 2):
-        """
-        可视化参数配置
-
-        参数:
-            bbox_color: 边界框颜色(BGR格式)
-            text_color: 文字颜色
-            font_scale: 字体大小
-            thickness: 线条粗细
-        """
         self.bbox_color = bbox_color
         self.text_color = text_color
         self.font_scale = font_scale
         self.thickness = thickness
 
+        self.COLOR_MAP = {
+            "angry": (0, 0, 255),
+            "happy": (0, 255, 0),
+            "neutral": (255, 255, 0),
+            "sad": (255, 0, 0),
+            "surprise": (128, 0, 255)
+        }
+
     def draw_detections(self, img: np.ndarray, detections: List[Dict]) -> np.ndarray:
         try:
-            # 输入验证
-            if img is None or len(img.shape) != 3:
-                return self.error_image("Invalid input")
+            if isinstance(img, torch.Tensor):
+                img = img.permute(1, 2, 0).cpu().numpy()  # 将 Tensor 转为 NumPy 数组
 
             img = img.copy()
-            if not detections:
-                return img
-
             for det in detections:
-                # 验证bbox格式
                 bbox = det.get('bbox', [])
                 if len(bbox) != 4 or not all(isinstance(x, (int, float)) for x in bbox):
                     continue
 
-                # 转换为整数坐标
                 x, y, w, h = map(int, bbox)
-
-                # 验证坐标范围
-                if x < 0 or y < 0 or w <= 0 or h <= 0:
-                    continue
-                if x + w > img.shape[1] or y + h > img.shape[0]:
-                    continue
-
-                # 绘制检测框
-                cv2.rectangle(img, (x, y), (x + w, y + h), self.COLOR_MAP[det['label']], 2)
-
+                color = self.COLOR_MAP.get(det['label'], self.bbox_color)
+                cv2.rectangle(img, (x, y), (x + w, y + h), color, self.thickness)
+                cv2.putText(img, det['label'], (x, y - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, self.font_scale,
+                            self.text_color, self.thickness)
             return img
         except Exception as e:
             print(f"[ERROR] Visualization failed: {str(e)}")
             return self.error_image("Render error")
 
     def draw_fps(self, image: np.ndarray, fps: float) -> np.ndarray:
-        """在图像左上角绘制FPS"""
         cv2.putText(image,
                     f"FPS: {fps:.1f}",
                     (20, 40),
@@ -68,22 +56,27 @@ class ResultVisualizer:
         return image
 
     def plot_histogram(self, detections: List[Dict]) -> plt.Figure:
-        """生成表情统计直方图"""
         labels = [d['label'] for d in detections]
         unique, counts = np.unique(labels, return_counts=True)
 
         fig, ax = plt.subplots(figsize=(8, 4))
         bars = ax.bar(unique, counts,
-                      color=[self.COLOR_MAP[l] for l in unique])
+                      color=[self.COLOR_MAP.get(l, (0.5, 0.5, 0.5)) for l in unique])
 
         ax.set_title('表情分布统计')
         ax.set_ylabel('出现次数')
         plt.xticks(rotation=45)
 
-        # 在柱子上方显示数值
         for bar in bars:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width() / 2., height,
                     f'{int(height)}', ha='center', va='bottom')
 
         return fig
+
+    def error_image(self, text: str) -> np.ndarray:
+        img = np.zeros((200, 400, 3), dtype=np.uint8)
+        cv2.putText(img, text, (20, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                    (0, 0, 255), 2)
+        return img
