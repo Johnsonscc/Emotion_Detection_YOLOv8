@@ -1,153 +1,165 @@
-import matplotlib
-matplotlib.use('Agg')  # 强制禁用 matplotlib 图形绘制
-import gradio as gr
-import numpy as np
-import cv2
-import yaml
-import traceback
+import tempfile
 from pathlib import Path
-from typing import Iterator, Optional
-from layouts import assemble_layout
-from components import (
-    CameraProcessor,
-    ResultRenderer,
-    StateManager,
-    ModelLoader
-)
+import gradio as gr
+from gradio_app.layouts.header import create_header
+from gradio_app.layouts.input_panel import create_input_panel
+from gradio_app.layouts.output_panel import create_output_panel
+from gradio_app.layouts.footer import create_footer
+from gradio_app.components.state_manager import StateManager
+from gradio_app.components.camera_processor import CameraProcessor
+from gradio_app.config.theme_config import load_theme
+from core.inference import EmotionDetector
+from core.postprocess import process_detection_results
+from core.visualize import draw_detections
+from PIL import Image
 
-class EmotionDetectionApp:
-    """表情识别主应用类（已修复参数不匹配错误）"""
+# 在创建Blocks前加载主题
+theme = load_theme()
 
-    def __init__(self, config_path: str = "config/ui_config.yaml"):
-        # 加载配置
-        self.config = self._load_config(config_path)
+model = EmotionDetector("../models/yolov8l-emo.pt")
 
-        # 初始化核心组件
-        self.state = StateManager()
-        self.model_loader = ModelLoader("config/model_config.yaml")
-        self.camera = CameraProcessor(self.config["camera"])
-        self.renderer = ResultRenderer()
+state_manager = StateManager()
+camera_processor = CameraProcessor()
 
-        # 加载模型（确保使用正确的YOLO加载方式）
-        model_path = Path("/Users/johnson/Desktop/Joh/Machine_Learning/Emotion_Detection_YOLOv8/models") / self.config["model"]["path"]
-        self.model = self.model_loader.load_model(model_path)
 
-    def _load_config(self, config_path: str) -> dict:
-        """加载配置文件"""
-        with open(config_path) as f:
-            return yaml.safe_load(f)
+def analyze_image(image_path):
+    try:
+        if not image_path:
+            raise ValueError("请先上传图片")
 
-    def create_interface(self):
-        """构建Gradio界面（修复事件绑定）"""
-        with gr.Blocks(
-                title=self.config["app"]["title"],
-                css=self._get_css(),
-                theme=gr.themes.Soft()
-        ) as demo:
-            # 组装布局
-            layout = assemble_layout(self.state)
+        results = model.predict(image_path)
+        detections = process_detection_results(results)
+        state_manager.update_detections(detections)
 
-            # 事件绑定（关键修复点）
-            self._bind_events(layout)
+        image = Image.open(image_path)
+        visualized = draw_detections(image, detections)
+        stats = state_manager.generate_stats()
+        pie_chart = state_manager.generate_pie_chart()
 
-        return demo
+        return visualized, stats, pie_chart, detections
 
-    def _get_css(self) -> str:
-        """加载自定义CSS"""
-        with open("assets/styles.css") as f:
-            return f.read()
+    except Exception as e:
+        print(f"分析图片时出错: {e}")
+        return None, gr.DataFrame(), None, {"error": str(e)}
 
-    def _bind_events(self, layout):
-        """修复版事件绑定方法"""
-        # ===== 实时摄像头流处理 =====
-        layout["input_panel"]["webcam"].stream(  # 使用stream事件
-            self._process_camera_frame,  # 处理单帧
-            inputs=layout["input_panel"]["webcam"],
-            outputs=layout["output_panel"]["result_image"]
+
+def analyze_video(video_path):
+    try:
+        if not video_path:
+            raise ValueError("请先上传视频")
+
+        # 创建临时文件保存处理后的视频
+        output_dir = Path(tempfile.mkdtemp())
+        output_path = str(output_dir / "output.mp4")
+
+        # 处理视频
+        detections = model.process_video(video_path, output_path=output_path)
+        state_manager.update_detections(detections)
+
+        # 生成统计信息
+        stats = state_manager.generate_stats()
+        pie_chart = state_manager.generate_pie_chart()
+        pie_chart.update_layout(autosize=True)  # 确保自动调整尺寸
+        return output_path, stats, pie_chart, detections
+
+    except Exception as e:
+        print(f"分析视频时出错: {e}")
+        return None, gr.DataFrame(), None, {"error": str(e)}
+
+
+def run_app():
+    with gr.Blocks(
+            title="YOLOv8 表情识别系统",
+            theme=theme,
+            css="assets/styles.css"
+    ) as demo:
+        create_header()
+
+        with gr.Row():
+            # 左侧输入面板 (40%宽度)
+            with gr.Column(scale=4):
+                input_components = create_input_panel()
+
+            # 右侧输出面板 (60%宽度)
+            with gr.Column(scale=6):
+                output_components = create_output_panel(state_manager)
+
+        create_footer()
+
+        input_components["image_button"].click(
+            fn=analyze_image,
+            inputs=input_components["image_input"],
+            outputs=[
+                output_components["result_image"],
+                output_components["stats_display"],
+                output_components["pie_plot"],
+                output_components["raw_output"]
+            ]
+        )
+        # 视频分析回调
+        input_components["video_button"].click(
+            fn=analyze_video,
+            inputs=input_components["video_input"],
+            outputs=[
+                output_components["result_video"],
+                output_components["stats_display"],
+                output_components["pie_plot"],
+                output_components["raw_output"]
+            ]
+        )
+        # 新增摄像头功能回调
+        input_components["camera_button"].click(
+            fn=lambda: camera_processor.start_camera(),
+            outputs=None
         )
 
-        # ===== 图片上传处理 =====
-        layout["input_panel"]["upload_image"].upload(
-            self._process_upload_image,  # 简化参数
-            inputs=layout["input_panel"]["upload_image"],
-            outputs=layout["output_panel"]["result_image"]
+        input_components["camera_stop"].click(
+            fn=lambda: camera_processor.stop_camera(),
+            outputs=None
         )
 
-        # ===== 视频上传处理 =====
-        layout["input_panel"]["upload_video"].upload(
-            self._process_video_stream,  # 使用正确的生成器
-            inputs=layout["input_panel"]["upload_video"],
-            outputs=layout["output_panel"]["result_image"]
+        # 实时摄像头帧处理
+        demo.load(
+            fn=lambda: camera_processor.get_camera_frame(),
+            inputs=None,
+            outputs=input_components["camera_output"],
+            every=0.1  # 100毫秒更新一次
         )
 
-    def _process_camera_frame(self, frame: np.ndarray) -> np.ndarray:
-        """处理摄像头单帧输入（参数适配）"""
-        if not self.state.state.running_flag:
-            return np.zeros((480, 640, 3), dtype=np.uint8)
+        # 摄像头画面的实时分析
+        input_components["camera_output"].change(
+            fn=lambda img: analyze_camera(img, state_manager),
+            inputs=input_components["camera_output"],
+            outputs=[
+                output_components["result_image"],
+                output_components["stats_display"],
+                output_components["pie_plot"],
+                output_components["raw_output"]
+            ]
+        )
 
+    demo.launch(server_name="127.0.0.1", server_port=7860)
+
+    def analyze_camera(frame, state_manager):
+        """处理摄像头帧的分析"""
         try:
-            processed = self.camera.process_frame(frame)
-            detections = self.model.predict(processed)
-            return self.renderer.render(processed, detections)
+            if frame is None:
+                raise ValueError("未获取到摄像头画面")
+
+            results = model.predict(frame)
+            detections = process_detection_results(results)
+            state_manager.update_detections(detections)
+
+            visualized = draw_detections(frame, detections)
+            stats = state_manager.generate_stats()
+            pie_chart = state_manager.generate_pie_chart()
+
+            return visualized, stats, pie_chart, detections
+
         except Exception as e:
-            print(f"Camera error: {str(e)}")
-            return self.renderer.error_image()
-
-    def _process_upload_image(self, file_path: str) -> np.ndarray:  # ✔️ 参数改为字符串
-        """正确接收文件路径"""
-        try:
-            if not file_path:
-                return self.renderer.error_image("空文件路径")
-
-            # 直接使用字符串路径
-            img = cv2.imread(file_path)
-            if img is None:
-                raise ValueError(f"无法读取图片: {file_path}")
-
-            detections = self.model.predict(img)
-            return self.renderer.render(img, detections)
-        except Exception as e:
-            print(f"Image processing error: {str(e)}")
-            return self.renderer.error_image()
-
-    def _process_video_stream(self, video_path: str) -> Iterator[np.ndarray]:
-        """生成器方式处理视频流（修复迭代问题）"""
-        cap = cv2.VideoCapture(video_path)
-        self.state.state.running_flag = True
-
-        try:
-            while self.state.state.running_flag and cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-                processed = self.camera.process_frame(frame)
-                detections = self.model.predict(processed, verbose=True)  # 显式启用 verbose
-                yield self.renderer.render(processed, detections)
-        finally:
-            cap.release()
-            self.state.state.running_flag = False
-            print("✅ 视频处理完成")
-
-    def _check_button_state(self):
-        """统一状态管理"""
-        valid_model = self.model is not None
-        valid_input = self.state.state.input_type in ["实时摄像头", "图片上传", "视频文件"]
-        return gr.Button.update(interactive=valid_model and valid_input)
+            print(f"摄像头分析出错: {e}")
+            return None, gr.DataFrame(), None, {"error": str(e)}
 
 
 if __name__ == "__main__":
-    app = EmotionDetectionApp()
-    interface = app.create_interface()
-
-    # 启动参数（推荐设置max_threads）
-    try:
-        # 你的主要代码逻辑
-        interface.launch(
-            server_port=7860,
-            share=False,
-            max_threads=4
-        )
-    except Exception as e:
-        print(f"发生错误: {str(e)}")
-        traceback.print_exc()
+    run_app()

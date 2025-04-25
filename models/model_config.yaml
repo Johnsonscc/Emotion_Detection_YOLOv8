@@ -1,5 +1,5 @@
 model:
-  name: "yolov8n-emo"
+  name: "yolov8l-emo"
   task: "classification"
   input_size: [640,640]  # 输入图像尺寸
   classes: ["anger", "fear", "happy", "neutral", "sad"]

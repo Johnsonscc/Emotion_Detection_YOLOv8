@@ -1,32 +1,81 @@
 import gradio as gr
-import pandas as pd
 
-def create() -> dict:
-    """创建结果展示面板"""
-    with gr.Column(variant="panel"):
-        # 可视化结果
-        result_image = gr.Image(
-            label="检测结果",
-            interactive=False
-        )
 
-        # 结构化数据
-        with gr.Tab("数值结果"):
-            result_table = gr.Dataframe(
-                headers=["表情", "置信度", "位置"],
-                datatype=["str", "number", "str"],
-                row_count=5
+def create_output_panel(state_manager):
+    with gr.Tabs(elem_classes=["output-tabs"]):
+        with gr.Tab("🔍 检测结果"):
+            with gr.Tabs():
+                with gr.Tab("🖼️ 图片结果"):
+                    result_image = gr.Image(
+                        label="",
+                        elem_classes=["result-image"]
+                    )
+                with gr.Tab("🎬 视频结果"):
+                    with gr.Column():
+                        result_video = gr.Video(label="")
+                        video_download = gr.Button(
+                            "⬇️ 下载结果视频",
+                            size="sm",
+                            visible=False
+                        )
+
+        with gr.Tab("📊 统计信息", elem_id="stats-tab"):
+            with gr.Row():
+                with gr.Column(scale=7):
+                    pie_plot = gr.Plot(
+                        label="表情分布比例",
+                        elem_id="pie-chart"
+                    )
+            stats_display = gr.DataFrame(
+                headers=["表情", "数量", "平均置信度"],
+                label="详细统计",
+                interactive=False,
+                elem_classes=["stats-table"]
             )
 
-        # 历史统计 - 使用 gr.Image() 显示图表
-        with gr.Tab("趋势分析"):
-            plot = gr.Image(
-                label="表情分布变化",  # 这里用图像展示趋势图
-                interactive=False  # 不需要交互
+        with gr.Tab("📁 原始数据"):
+            raw_output = gr.JSON(
+                label="检测结果原始数据",
+                elem_classes=["raw-data"]
             )
 
+        # CSS样式
+        gr.HTML("""
+        <style>
+            /* 图表容器样式 */
+            #pie-chart, #bar-chart {
+                border-radius: 8px;
+                background: white;
+                padding: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            /* 统计表格样式 */
+            .stats-table {
+                margin-top: 15px;
+                max-height: 250px;
+                overflow-y: auto;
+            }
+
+            /* 结果图片样式 */
+            .result-image {
+                max-height: 500px;
+                border-radius: 8px;
+            }
+
+            /* 标签样式 */
+            .block-title {
+                font-size: 1.1em !important;
+                font-weight: 600 !important;
+            }
+        </style>
+        """)
     return {
         "result_image": result_image,
-        "result_table": result_table,
-        "plot": plot
+        "result_video": result_video,
+        "pie_plot": pie_plot,
+        "stats_display": stats_display,
+        "raw_output": raw_output,
+        "video_download": video_download
     }
+

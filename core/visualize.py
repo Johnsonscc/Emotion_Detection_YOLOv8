@@ -1,82 +1,75 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from typing import List, Dict
+from PIL import Image, ImageDraw, ImageFont
+from typing import Optional
 
 
-class ResultVisualizer:
-    def __init__(self,
-                 bbox_color: tuple = (0, 255, 0),
-                 text_color: tuple = (0, 0, 255),
-                 font_scale: float = 0.8,
-                 thickness: int = 2):
-        self.bbox_color = bbox_color
-        self.text_color = text_color
-        self.font_scale = font_scale
-        self.thickness = thickness
+def get_text_size(draw: ImageDraw, text: str, font: Optional[ImageFont.FreeTypeFont] = None):
+    """兼容不同Pillow版本的获取文本尺寸"""
+    try:
+        if font:
+            # Pillow 10.0.0+ 使用getbbox方法
+            bbox = draw.textbbox((0, 0), text, font=font)
+            return bbox[2] - bbox[0], bbox[3] - bbox[1]
+        else:
+            # 旧的textsize方法
+            return draw.textsize(text)
+    except AttributeError:
+        # 更早版本的兼容
+        bbox = draw.textbbox((0, 0), text, font=font)
+        return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-        self.COLOR_MAP = {
-            "angry": (0, 0, 255),
-            "happy": (0, 255, 0),
-            "neutral": (255, 255, 0),
-            "sad": (255, 0, 0),
-            "surprise": (128, 0, 255)
+
+def draw_detections(image, detections, class_colors=None):
+    if isinstance(image, np.ndarray):
+        image = Image.fromarray(image)
+
+    # 尝试加载字体(使用系统默认字体)
+    try:
+        font = ImageFont.truetype("arial.ttf", 12)
+    except:
+        font = ImageFont.load_default()
+
+    draw = ImageDraw.Draw(image)
+
+    # 默认颜色映射
+    if class_colors is None:
+        class_colors = {
+            'anger': (255, 0, 0),  # 红色
+            'fear': (128, 0, 128),  # 紫色
+            'happy': (0, 255, 0),  # 绿色
+            'neutral': (255, 255, 0),  # 黄色
+            'sad': (0, 0, 255)  # 蓝色
         }
 
-    def draw_detections(self, img: np.ndarray, detections: List[Dict]) -> np.ndarray:
-        try:
-            if isinstance(img, torch.Tensor):
-                img = img.permute(1, 2, 0).cpu().numpy()  # 将 Tensor 转为 NumPy 数组
+    for det in detections:
+        box = det['box']
+        class_name = det['class_name']
+        confidence = det['confidence']
+        color = class_colors.get(class_name, (255, 0, 0))
 
-            img = img.copy()
-            for det in detections:
-                bbox = det.get('bbox', [])
-                if len(bbox) != 4 or not all(isinstance(x, (int, float)) for x in bbox):
-                    continue
+        # 绘制边界框
+        draw.rectangle(box, outline=color, width=2)
 
-                x, y, w, h = map(int, bbox)
-                color = self.COLOR_MAP.get(det['label'], self.bbox_color)
-                cv2.rectangle(img, (x, y), (x + w, y + h), color, self.thickness)
-                cv2.putText(img, det['label'], (x, y - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, self.font_scale,
-                            self.text_color, self.thickness)
-            return img
-        except Exception as e:
-            print(f"[ERROR] Visualization failed: {str(e)}")
-            return self.error_image("Render error")
+        # 构建标签文本
+        label = f"{class_name} {confidence:.2f}"
 
-    def draw_fps(self, image: np.ndarray, fps: float) -> np.ndarray:
-        cv2.putText(image,
-                    f"FPS: {fps:.1f}",
-                    (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.0,
-                    (255, 0, 0),
-                    2)
-        return image
+        # 获取文本尺寸
+        text_width, text_height = get_text_size(draw, label, font)
 
-    def plot_histogram(self, detections: List[Dict]) -> plt.Figure:
-        labels = [d['label'] for d in detections]
-        unique, counts = np.unique(labels, return_counts=True)
+        # 绘制标签背景
+        draw.rectangle(
+            [box[0], box[1] - text_height - 4,
+             box[0] + text_width + 4, box[1]],
+            fill=color
+        )
 
-        fig, ax = plt.subplots(figsize=(8, 4))
-        bars = ax.bar(unique, counts,
-                      color=[self.COLOR_MAP.get(l, (0.5, 0.5, 0.5)) for l in unique])
+        # 绘制标签文本
+        draw.text(
+            (box[0] + 2, box[1] - text_height - 2),
+            label,
+            fill=(255, 255, 255),
+            font=font
+        )
 
-        ax.set_title('表情分布统计')
-        ax.set_ylabel('出现次数')
-        plt.xticks(rotation=45)
-
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2., height,
-                    f'{int(height)}', ha='center', va='bottom')
-
-        return fig
-
-    def error_image(self, text: str) -> np.ndarray:
-        img = np.zeros((200, 400, 3), dtype=np.uint8)
-        cv2.putText(img, text, (20, 100),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9,
-                    (0, 0, 255), 2)
-        return img
+    return np.array(image)

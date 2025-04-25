@@ -1,28 +1,26 @@
 import gradio as gr
-import datetime
 
-
-def create() -> dict:
-    """创建底部状态栏"""
-    with gr.Row(variant="compact"):
-        # 系统状态
-        status = gr.HTML(
-            value=f"""
-            <div style='text-align: center'>
-                <span>🟢 系统运行中</span> | 
-                <span>CPU: 12%</span> | 
-                <span>内存: 3.2/16GB</span> | 
-                <span>更新时间: {datetime.datetime.now().strftime("%H:%M:%S")}</span>
+def create_footer():
+    gr.HTML("""
+    <footer style="
+        margin-top: 20px;
+        padding: 15px;
+        text-align: center;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 8px;
+    ">
+        <div style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        ">
+            <div>© 2025 表情识别系统 | 版本 1.0</div>
+            <div>
+                <a href="#" style="margin: 0 10px; color: inherit;">使用说明</a> |
+                <a href="#" style="margin: 0 10px; color: inherit;">关于我们</a> |
+                <a href="#" style="margin: 0 10px; color: inherit;">帮助中心</a>
             </div>
-            """
-        )
-
-        # 版本信息
-        version = gr.HTML(
-            value="<div style='text-align: right'>版本 1.0.0 © 2023</div>"
-        )
-
-    return {
-        "status": status,
-        "version": version
-    }
+        </div>
+    </footer>
+    """)

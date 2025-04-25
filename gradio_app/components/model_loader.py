@@ -1,38 +1,14 @@
-import torch
-from ultralytics import YOLO
-from pathlib import Path
-from typing import Optional
+from core.inference import EmotionDetector
+import os
 
 
 class ModelLoader:
-    """模型加载与管理组件"""
+    def __init__(self):
+        self.model = None
 
-    def __init__(self, config_path: str):
-        self.config = self._load_config(config_path)
-        self.device = self._select_device()
+    def load_model(self, model_path="../models/yolov8l-emo.pt"):
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"模型文件 {model_path} 不存在")
 
-    def load_model(self, model_path: Path) -> YOLO:
-        """加载YOLOv8模型"""
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found: {model_path}")
-
-        model = YOLO(str(model_path))
-        model.to(self.device)
-
-        # 半精度加速
-        if self.config["use_amp"]:
-            model.half()
-
-        return model
-
-    def _load_config(self, path: str) -> dict:
-        """加载模型配置"""
-        # 实现配置文件读取逻辑
-        return {
-            "use_amp": True,
-            "device": "auto"
-        }
-
-    def _select_device(self) -> str:
-        """自动选择计算设备"""
-        return "cuda" if torch.cuda.is_available() else "cpu"
+        self.model = EmotionDetector(model_path)
+        return "模型加载成功"

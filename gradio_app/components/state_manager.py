@@ -1,51 +1,80 @@
-import threading
-from dataclasses import dataclass
-from typing import Optional
+import pandas as pd
+import plotly.express as px
 
-
-@dataclass
-class AppState:
-    current_model: str
-    is_running: bool = True
-    frame_count: int = 0
-    input_type: str = "摄像头"  # add
-    running_flag: bool = False  # 新增运行状态标志
 
 class StateManager:
-    """应用状态管理器"""
     def __init__(self):
-        self.state = AppState(
-            current_model="yolov8n",
-            running_flag=False  # 显式初始化
-        )
-        self.lock = threading.Lock()
+        self.current_detections = []
 
-    # 新增状态操作方法
-    def toggle_running(self):
-        with self.lock:
-            self.state.running_flag = not self.state.running_flag
-            return self.state.running_flag
+    def update_detections(self, detections):
+        self.current_detections = detections
 
-    def switch_model(self, model_name: str):
-        """线程安全的模型切换"""
-        with self.lock:
-            self.state.current_model = model_name
+    def generate_stats(self):
+        if not self.current_detections:
+            return pd.DataFrame(columns=["表情", "数量", "平均置信度"])
 
-    def get_state(self) -> AppState:
-        """获取当前状态快照"""
-        with self.lock:
-            return self.state
+        df = pd.DataFrame({
+            '表情': [d['class_name'] for d in self.current_detections],
+            '置信度': [d['confidence'] for d in self.current_detections]
+        })
 
-    def toggle_running(self):
-        """切换运行状态"""
-        with self.lock:
-            self.state.running_flag = not self.state.running_flag
-            return self.state.running_flag
+        stats = df.groupby('表情', observed=True).agg(
+            数量=('表情', 'count'),
+            平均置信度=('置信度', 'mean')
+        ).reset_index()
 
-    def set_input_type(self, input_type: str):
-        with self.lock:
-            self.state.input_type = input_type
+        return stats.round({'平均置信度': 3})
 
-    def get_input_type(self) -> str:
-        with self.lock:
-            return self.state.input_type
+    def generate_pie_chart(self):
+        stats = self.generate_stats()
+        #print("统计数据:", stats)
+
+        if stats.empty or len(stats) == 0:
+            fig = go.Figure()
+            fig.add_trace(go.Pie(
+                labels=["无数据"],
+                values=[1],
+                marker_colors=['lightgrey']
+            ))
+            fig.update_layout(showlegend=False)
+            return fig
+
+        try:
+            import plotly.graph_objects as go
+
+            # 强制转换为整数
+            counts = [int(x) for x in stats['数量'].tolist()]
+            labels = stats['表情'].tolist()
+
+            # 使用graph_objects直接创建
+            fig = go.Figure(data=[
+                go.Pie(
+                    labels=labels,
+                    values=counts,
+                    hole=0.3,
+                    textinfo='percent+label+value',
+                    insidetextorientation='radial',
+                    marker=dict(
+                        colors=['#FF9999', '#99FF99', '#66B2FF', '#FFCC99', '#D8BFD8'],
+                        line=dict(color='white', width=2)
+                    )
+                )
+            ])
+
+            fig.update_layout(
+                margin=dict(t=40, b=20, l=20, r=20),
+                showlegend=False,
+                uniformtext_minsize=12,
+                uniformtext_mode='hide'
+            )
+
+            return fig
+
+        except Exception as e:
+            print("生成饼图时出错:", e)
+            import traceback
+            traceback.print_exc()
+            return None
+
+
+
