@@ -3,7 +3,7 @@ from core.inference import EmotionDetector
 
 
 def test_error_conditions():
-    detector = EmotionDetector("models/yolov8l-emo.pt")
+    detector = EmotionDetector("models/yolov8n-emo.pt")
 
     # 测试空输入
     assert detector.predict(None) == []

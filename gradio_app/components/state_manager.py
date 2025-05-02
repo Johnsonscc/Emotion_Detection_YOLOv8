@@ -1,6 +1,6 @@
 import pandas as pd
 import plotly.express as px
-
+import plotly.graph_objects as go  # 新增全局导入
 
 class StateManager:
     def __init__(self):
@@ -27,21 +27,21 @@ class StateManager:
 
     def generate_pie_chart(self):
         stats = self.generate_stats()
-        #print("统计数据:", stats)
+        print("统计数据:", stats)
 
         if stats.empty or len(stats) == 0:
-            fig = go.Figure()
+            # 使用全局限定的go对象
+            fig = go.Figure()  # 修改这里
             fig.add_trace(go.Pie(
                 labels=["无数据"],
                 values=[1],
                 marker_colors=['lightgrey']
+
             ))
             fig.update_layout(showlegend=False)
             return fig
 
         try:
-            import plotly.graph_objects as go
-
             # 强制转换为整数
             counts = [int(x) for x in stats['数量'].tolist()]
             labels = stats['表情'].tolist()

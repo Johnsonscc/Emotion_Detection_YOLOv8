@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
 import gradio as gr
+import numpy as np
 from gradio_app.layouts.header import create_header
 from gradio_app.layouts.input_panel import create_input_panel
 from gradio_app.layouts.output_panel import create_output_panel
@@ -16,11 +17,40 @@ from PIL import Image
 # 在创建Blocks前加载主题
 theme = load_theme()
 
-model = EmotionDetector("../models/yolov8l-emo.pt")
-
+model = EmotionDetector("../models/yolov8n-emo.pt")
 state_manager = StateManager()
+# 初始化摄像头处理器
 camera_processor = CameraProcessor()
 
+
+def get_screen_size():
+    """跨平台获取屏幕尺寸的替代方案"""
+    try:
+        # Windows系统
+        if os.name == 'nt':
+            import ctypes
+            user32 = ctypes.windll.user32
+            return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+        # Linux系统 (需要xlib)
+        elif os.name == 'posix':
+            from Xlib import display
+            d = display.Display().screen()
+            return d.width_in_pixels, d.height_in_pixels
+
+        # MacOS替代方案
+        else:
+            # 使用tkinter作为跨平台后备方案
+            import tkinter as tk
+            root = tk.Tk()
+            width = root.winfo_screenwidth()
+            height = root.winfo_screenheight()
+            root.destroy()
+            return width, height
+
+    except Exception:
+        # 默认返回常见分辨率
+        return 1920, 1080
 
 def analyze_image(image_path):
     try:
@@ -60,6 +90,7 @@ def analyze_video(video_path):
         stats = state_manager.generate_stats()
         pie_chart = state_manager.generate_pie_chart()
         pie_chart.update_layout(autosize=True)  # 确保自动调整尺寸
+
         return output_path, stats, pie_chart, detections
 
     except Exception as e:
@@ -67,11 +98,39 @@ def analyze_video(video_path):
         return None, gr.DataFrame(), None, {"error": str(e)}
 
 
+def analyze_camera(frame, state_manager):
+    try:
+        if frame is None:
+            return None, None, None, {"status": "等待摄像头画面"}
+
+        # 转换格式
+        if isinstance(frame, np.ndarray):
+            frame_np = frame
+        else:  # 如果是PIL图像
+            frame_np = np.array(frame)
+
+        # 执行分析
+        results = model.predict(frame_np)
+        detections = process_detection_results(results)
+        state_manager.update_detections(detections)
+
+        # 可视化结果
+        visualized = draw_detections(frame_np, detections)
+        stats = state_manager.generate_stats()
+        pie_chart = state_manager.generate_pie_chart()
+
+        return visualized, stats, pie_chart, detections
+
+    except Exception as e:
+        print(f"摄像头分析出错: {e}")
+        return None, None, None, {"error": str(e)}
+
+
 def run_app():
     with gr.Blocks(
             title="YOLOv8 表情识别系统",
             theme=theme,
-            css="assets/styles.css"
+            css="assets/styles.css",
     ) as demo:
         create_header()
 
@@ -85,7 +144,7 @@ def run_app():
                 output_components = create_output_panel(state_manager)
 
         create_footer()
-
+        # 图片分析回调
         input_components["image_button"].click(
             fn=analyze_image,
             inputs=input_components["image_input"],
@@ -107,26 +166,24 @@ def run_app():
                 output_components["raw_output"]
             ]
         )
-        # 新增摄像头功能回调
-        input_components["camera_button"].click(
+        # 开启摄像头
+        input_components["start_button"].click(
             fn=lambda: camera_processor.start_camera(),
-            outputs=None
+            outputs=input_components["camera_status"]  # 需要添加状态显示组件
         )
-
-        input_components["camera_stop"].click(
+        # 停止摄像头
+        input_components["stop_button"].click(
             fn=lambda: camera_processor.stop_camera(),
             outputs=None
         )
-
-        # 实时摄像头帧处理
+        # 实时摄像头帧获取
         demo.load(
             fn=lambda: camera_processor.get_camera_frame(),
             inputs=None,
             outputs=input_components["camera_output"],
-            every=0.1  # 100毫秒更新一次
+            every=0.1  # 100ms刷新
         )
-
-        # 摄像头画面的实时分析
+        # 实时分析回调
         input_components["camera_output"].change(
             fn=lambda img: analyze_camera(img, state_manager),
             inputs=input_components["camera_output"],
@@ -135,30 +192,12 @@ def run_app():
                 output_components["stats_display"],
                 output_components["pie_plot"],
                 output_components["raw_output"]
-            ]
+            ],
+            show_progress="hidden",
+            queue = True  # 添加队列机制
         )
 
-    demo.launch(server_name="127.0.0.1", server_port=7860)
-
-    def analyze_camera(frame, state_manager):
-        """处理摄像头帧的分析"""
-        try:
-            if frame is None:
-                raise ValueError("未获取到摄像头画面")
-
-            results = model.predict(frame)
-            detections = process_detection_results(results)
-            state_manager.update_detections(detections)
-
-            visualized = draw_detections(frame, detections)
-            stats = state_manager.generate_stats()
-            pie_chart = state_manager.generate_pie_chart()
-
-            return visualized, stats, pie_chart, detections
-
-        except Exception as e:
-            print(f"摄像头分析出错: {e}")
-            return None, gr.DataFrame(), None, {"error": str(e)}
+    demo.launch(server_name="127.0.0.1", server_port=7860 )
 
 
 if __name__ == "__main__":

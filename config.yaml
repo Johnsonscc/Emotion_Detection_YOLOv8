@@ -1,7 +1,17 @@
 model:
-  path: "../models/yolov8l-emo.pt"
+  path: "../models/yolov8n-emo.pt"
   input_size: 640
 
 ui:
   theme: "light"
   default_image: "../gradio_app/assets/icons/logo.jpg"
+
+runtime:
+  tensorrt: True              # 启用TensorRT加速
+  half_precision: True        # 半精度推理
+  stream_buffer: 10           # 视频流缓冲区大小（帧）
+
+security:
+  max_file_size: 1024         # 文件上传最大限制（MB）
+  allowed_formats: [ jpg,png,mp4,avi ]
+

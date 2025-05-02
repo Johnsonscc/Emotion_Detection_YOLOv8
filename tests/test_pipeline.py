@@ -4,7 +4,7 @@ from core.inference import EmotionDetector
 
 
 def test_error_handling():
-    detector = EmotionDetector("models/yolov8l-emo.pt")
+    detector = EmotionDetector("models/yolov8n-emo.pt")
 
     # 测试用例
     cases = [

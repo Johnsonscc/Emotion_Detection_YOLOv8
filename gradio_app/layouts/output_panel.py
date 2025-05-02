@@ -7,8 +7,10 @@ def create_output_panel(state_manager):
             with gr.Tabs():
                 with gr.Tab("🖼️ 图片结果"):
                     result_image = gr.Image(
-                        label="",
-                        elem_classes=["result-image"]
+                        label="检测结果",
+                        elem_classes=["result-image"],
+                        height="auto",  # 关键修改点
+                        container=True  # 去除默认容器约束
                     )
                 with gr.Tab("🎬 视频结果"):
                     with gr.Column():
@@ -59,8 +61,10 @@ def create_output_panel(state_manager):
 
             /* 结果图片样式 */
             .result-image {
-                max-height: 500px;
-                border-radius: 8px;
+            max-width: 80% !important;
+            height: auto !important;
+            object-fit: contain !important;
+            border-radius: 8px;
             }
 
             /* 标签样式 */
@@ -68,6 +72,7 @@ def create_output_panel(state_manager):
                 font-size: 1.1em !important;
                 font-weight: 600 !important;
             }
+            
         </style>
         """)
     return {
