@@ -34,23 +34,28 @@ def create_input_panel():
 
         with gr.Tab("📷 实时摄像头"):
             gr.Markdown("### 🎥 实时表情识别")
-            with gr.Row():
-                camera_button = gr.Button(
-                    "🎥 开启摄像头",
-                    size="lg",
-                    variant="secondary"
-                )
-                camera_stop = gr.Button(
-                    "⏹️ 停止",
-                    size="lg",
-                    variant="stop"
-                )
             camera_output = gr.Image(
                 label="摄像头画面",
                 streaming=True,
                 height=300,
                 elem_classes=["camera-output"]
             )
+            with gr.Row():
+                start_button = gr.Button(
+                    "🎥 开始分析",
+                    size="lg",
+                    variant="primary"
+                )
+                stop_button = gr.Button(
+                    "⏹️ 停止",
+                    size="lg",
+                    variant="stop"
+                )
+                camera_status = gr.Textbox(
+                    "",
+                    label="状态",
+                    interactive=False
+                )  # 新增状态显示
 
     gr.HTML("""
     <style>
@@ -74,7 +79,9 @@ def create_input_panel():
         "image_button": image_button,
         "video_input": video_input,
         "video_button": video_button,
-        "camera_button": camera_button,
-        "camera_stop": camera_stop,
-        "camera_output": camera_output
+        "camera_output": camera_output,
+        "start_button": start_button,
+        "stop_button": stop_button,
+        "camera_status": camera_status,
     }
+

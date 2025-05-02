@@ -9,5 +9,5 @@ camera:
   max_fps: 30
 
 model:
-  path: "yolov8l-emo.pt"
+  path: "yolov8n-emo.pt"
   confidence_threshold: 0.5

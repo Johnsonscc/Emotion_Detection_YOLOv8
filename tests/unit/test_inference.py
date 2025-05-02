@@ -8,7 +8,7 @@ from emotion import EmotionInference
 class TestEmotionInference(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.model_path = Path("models/emotion_yolov8s.pt")
+        cls.model_path = Path("models/yolov8n-emo.pt")
         cls.test_img_dir = Path("test_images")
         cls.detector = EmotionInference(model_path=str(cls.model_path))
 
