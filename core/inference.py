@@ -12,11 +12,29 @@ from postprocess import process_detection_results
 from visualize import draw_detections
 
 class EmotionDetector:
-    def __init__(self, model_path, device='cuda' if torch.cuda.is_available() else 'mps'):
-        self.device = device
-        self.model = YOLO(model_path)
-        self.model.to(device)
+    def __init__(self, model_path):
+        self.device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+        self.model = YOLO(model_path).to(self.device)
+        self.img_size = 640  # 原始模型预设尺寸
+        self.batch_size = 4  # MPS推荐批大小
         self.class_names = ['anger', 'fear', 'happy', 'neutral', 'sad']
+
+    def predict_batch(self, frames):
+        if not frames:
+            return []
+
+        processed_batch = []
+        for img in frames:
+            # 精确复现原预测流程中的尺寸缩放
+            resized = cv2.resize(img, (self.img_size, self.img_size))  # 关键改动点
+            tensor = torch.from_numpy(resized).permute(2, 0, 1).to(self.device)
+            processed_batch.append(tensor.float() / 255.0)
+
+        inputs = torch.stack(processed_batch)
+
+        with torch.no_grad():
+            results = self.model(inputs)
+        return results
 
     def predict(self, image):
         results = self.model(image, verbose=False)
