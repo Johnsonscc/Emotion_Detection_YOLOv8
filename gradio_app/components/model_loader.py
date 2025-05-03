@@ -6,7 +6,7 @@ class ModelLoader:
     def __init__(self):
         self.model = None
 
-    def load_model(self, model_path="../models/yolov8n-emo.pt"):
+    def load_model(self, model_path="../models/yolov8s-emo.pt"):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"模型文件 {model_path} 不存在")
 

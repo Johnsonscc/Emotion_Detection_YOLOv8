@@ -12,7 +12,7 @@ from postprocess import process_detection_results
 from visualize import draw_detections
 
 class EmotionDetector:
-    def __init__(self, model_path, device='cuda' if torch.cuda.is_available() else 'cpu'):
+    def __init__(self, model_path, device='cuda' if torch.cuda.is_available() else 'mps'):
         self.device = device
         self.model = YOLO(model_path)
         self.model.to(device)

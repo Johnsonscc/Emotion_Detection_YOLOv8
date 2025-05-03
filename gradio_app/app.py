@@ -2,6 +2,9 @@ import tempfile
 from pathlib import Path
 import gradio as gr
 import numpy as np
+import torch
+import torch.nn.functional as F
+import torchvision.transforms as transforms
 from PIL import Image
 from gradio_app.layouts.header import create_header
 from gradio_app.layouts.input_panel import create_input_panel
@@ -18,7 +21,7 @@ from core.visualize import draw_detections
 # 在创建Blocks前加载主题
 theme = load_theme()
 
-model = EmotionDetector("../models/yolov8n-emo.pt")
+model = EmotionDetector("../models/yolov8s-emo.pt")
 state_manager = StateManager()
 # 初始化摄像头处理器
 camera_processor = CameraProcessor()
@@ -222,7 +225,12 @@ def run_app():
             queue = True  # 添加队列机制
         )
 
-    demo.launch(server_name="127.0.0.1", server_port=7860 )
+    demo.launch(
+        server_name="127.0.0.1",
+        server_port=7860 ,
+        max_threads=4,# 匹配CPU核心数
+        share=True
+    )
 
 
 if __name__ == "__main__":
