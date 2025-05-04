@@ -9,6 +9,8 @@ class CameraProcessor:
         self.latest_frame = None
         self.lock = threading.Lock()
         self.mirror_mode = True  # 初始状态（True为镜像模式）
+        self.frame_buffer = []  # 新增缓冲队列
+        self.buffer_size = 8 # 匹配MPS最优批大小
 
     def start_camera(self):
         if self.capture is None:
@@ -35,14 +37,19 @@ class CameraProcessor:
         thread.start()
 
     def get_camera_frame(self):
-        if self.running and self.latest_frame is not None:
-            with self.lock:
-                frame = self.latest_frame.copy()
-                # 只在需要时进行镜像翻转
-                if self.mirror_mode:
-                    frame = cv2.flip(frame, 1)  # 水平翻转
-                return frame
-        return None
+        if not self.running or self.latest_frame is None:
+            return None
+
+        with self.lock:
+            # 保持原始镜像处理不变
+            frame = cv2.flip(self.latest_frame, 1) if self.mirror_mode else self.latest_frame.copy()
+
+            # 自动填充缓冲队列
+            self.frame_buffer.append(frame)
+            if len(self.frame_buffer) > self.buffer_size:
+                self.frame_buffer.pop(0)
+
+            return frame
 
     def stop_camera(self):
         self.running = False

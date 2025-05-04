@@ -6,10 +6,6 @@ import os
 import sys
 from pathlib import Path
 
-# 确保可以导入core模块中的其他文件
-sys.path.append(str(Path(__file__).parent))
-from postprocess import process_detection_results
-from visualize import draw_detections
 
 class EmotionDetector:
     def __init__(self, model_path, device='cuda' if torch.cuda.is_available() else 'mps'):

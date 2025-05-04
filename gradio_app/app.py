@@ -104,24 +104,24 @@ def analyze_video(video_path):
 
 
 def analyze_camera(frame, state_manager):
-    perf_monitor.start_frame()
+    perf_monitor.start_frame()  # 仅在此处添加性能监控
+
     try:
         if frame is None:
             return None, None, None, {"status": "等待摄像头画面"}
-
-        # 转换格式
-        if isinstance(frame, np.ndarray):
-            frame_np = frame
-        else:  # 如果是PIL图像
-            frame_np = np.array(frame)
-
-        # 执行分析
-        results = model.predict(frame_np)
-        detections = process_detection_results(results)
-        state_manager.update_detections(detections)
-
-        # 可视化结果
-        visualized = draw_detections(frame_np, detections)
+        # 当缓冲队列满时触发批处理
+        if len(camera_processor.frame_buffer) == camera_processor.buffer_size:
+            batch_results = model.predict_batch(camera_processor.frame_buffer)
+            detections = process_detection_results(batch_results[-1])  # 只取最新结果
+            camera_processor.frame_buffer.clear()  # 清空缓冲
+        else:
+            # 原始单帧处理逻辑（保持完全不变）
+            frame_np = np.array(frame) if not isinstance(frame, np.ndarray) else frame
+            results = model.predict(frame_np)
+            detections = process_detection_results(results)
+        # 后续可视化代码完全保持不变
+        image = Image.fromarray(frame) if isinstance(frame, np.ndarray) else frame
+        visualized = draw_detections(image, detections)
         stats = state_manager.generate_stats()
         pie_chart = state_manager.generate_pie_chart()
 
@@ -132,7 +132,7 @@ def analyze_camera(frame, state_manager):
         return None, None, None, {"error": str(e)}
 
     finally:
-            perf_monitor.end_frame()
+        perf_monitor.end_frame()  # 传递真实处理量
 
 # 新增性能更新回调
 def update_perf():
@@ -229,7 +229,7 @@ def run_app():
         server_name="127.0.0.1",
         server_port=7860 ,
         max_threads=4,# 匹配CPU核心数
-        share=True
+        share=False
     )
 
 
