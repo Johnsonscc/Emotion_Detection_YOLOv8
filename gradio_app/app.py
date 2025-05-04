@@ -233,7 +233,7 @@ def run_app():
         server_name="127.0.0.1",
         server_port=7860 ,
         max_threads=4,# 匹配CPU核心数
-        share=Ture
+        share=True
     )
 
 
