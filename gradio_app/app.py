@@ -1,3 +1,7 @@
+import sys
+import os
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import tempfile
 from pathlib import Path
 import gradio as gr
@@ -229,7 +233,7 @@ def run_app():
         server_name="127.0.0.1",
         server_port=7860 ,
         max_threads=4,# 匹配CPU核心数
-        share=True
+        share=Ture
     )
 
 
