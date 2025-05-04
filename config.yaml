@@ -1,5 +1,5 @@
 model:
-  path: "../models/yolov8s-emo.pt"
+  path: "../models/yolov8n-emo.pt"
   input_size: 640
 
 ui:

@@ -21,7 +21,7 @@ from core.visualize import draw_detections
 # 在创建Blocks前加载主题
 theme = load_theme()
 
-model = EmotionDetector("../models/yolov8s-emo.pt")
+model = EmotionDetector("../models/yolov8n-emo.pt")
 state_manager = StateManager()
 # 初始化摄像头处理器
 camera_processor = CameraProcessor()

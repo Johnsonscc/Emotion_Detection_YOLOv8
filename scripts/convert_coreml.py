@@ -4,7 +4,7 @@ from ultralytics import YOLO
 
 def convert_to_coreml():
     # 加载原始模型
-    model = YOLO('../models/yolov8s-emo.pt')
+    model = YOLO('../models/yolov8n-emo.pt')
 
     # 使用样本数据校准转换
     sample_input = torch.rand(1, 3, 640, 640).cpu()  # YOLOv8输入尺寸
@@ -32,4 +32,4 @@ def convert_to_coreml():
     model.version = "1.0"
 
     # 保存模型
-    model.save("../models/yolov8s-emo.mlpackage")
+    model.save("../models/yolov8n-emo.mlpackage")

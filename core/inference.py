@@ -14,8 +14,26 @@ from visualize import draw_detections
 class EmotionDetector:
     def __init__(self, model_path, device='cuda' if torch.cuda.is_available() else 'mps'):
         self.device = device
-        self.model = YOLO(model_path)
+        # 修改模型加载方式
+        original_model = YOLO(model_path)
+
+        # 获取PyTorch原生模型
+        torch_model = original_model.model
+
+        # 动态量化配置
+        self.quantized_model = torch.quantization.quantize_dynamic(
+            torch_model.to('cpu'),  # 量化需要在CPU执行
+            {torch.nn.Conv2d, torch.nn.Linear},  # 量化关键层
+            dtype=torch.qint8
+        ).to(device)
+
+        # 保持与原YOLO类的兼容
+        self.model = original_model
+        self.model.model = self.quantized_model
+
         self.model.to(device)
+
+        self.batch_size = 4
         self.class_names = ['anger', 'fear', 'happy', 'neutral', 'sad']
 
     def predict(self, image):
