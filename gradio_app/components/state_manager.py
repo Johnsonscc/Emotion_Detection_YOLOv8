@@ -31,7 +31,7 @@ class StateManager:
 
         if stats.empty or len(stats) == 0:
             # 使用全局限定的go对象
-            fig = go.Figure()  # 修改这里
+            fig = go.Figure()
             fig.add_trace(go.Pie(
                 labels=["无数据"],
                 values=[1],

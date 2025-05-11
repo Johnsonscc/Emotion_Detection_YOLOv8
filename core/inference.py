@@ -12,10 +12,8 @@ class EmotionDetector:
         self.device = device
         # 修改模型加载方式
         original_model = YOLO(model_path)
-
         # 获取PyTorch原生模型
         torch_model = original_model.model
-
         # 动态量化配置
         self.quantized_model = torch.quantization.quantize_dynamic(
             torch_model.to('cpu'),  # 量化需要在CPU执行
@@ -26,9 +24,7 @@ class EmotionDetector:
         # 保持与原YOLO类的兼容
         self.model = original_model
         self.model.model = self.quantized_model
-
         self.model.to(device)
-
         self.batch_size = 4
         self.class_names = ['anger', 'fear', 'happy', 'neutral', 'sad']
 

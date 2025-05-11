@@ -5,19 +5,8 @@ from typing import Optional
 
 
 def get_text_size(draw: ImageDraw, text: str, font: Optional[ImageFont.FreeTypeFont] = None):
-    """兼容不同Pillow版本的获取文本尺寸"""
-    try:
-        if font:
-            # Pillow 10.0.0+ 使用getbbox方法
-            bbox = draw.textbbox((0, 0), text, font=font)
-            return bbox[2] - bbox[0], bbox[3] - bbox[1]
-        else:
-            # 旧的textsize方法
-            return draw.textsize(text)
-    except AttributeError:
-        # 更早版本的兼容
-        bbox = draw.textbbox((0, 0), text, font=font)
-        return bbox[2] - bbox[0], bbox[3] - bbox[1]
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
 def draw_detections(image, detections, class_colors=None):
