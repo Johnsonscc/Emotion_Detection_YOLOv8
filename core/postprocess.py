@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-def process_detection_results(results, conf_threshold=0.4):
+def process_detection_results(results, conf_threshold=0.1):
 
     # 解包数据并进行设备转换
     boxes = results.boxes.xyxy.cpu().numpy() if results.boxes else []
