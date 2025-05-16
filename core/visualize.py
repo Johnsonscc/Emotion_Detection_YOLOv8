@@ -8,17 +8,12 @@ def get_text_size(draw: ImageDraw, text: str, font: Optional[ImageFont.FreeTypeF
     bbox = draw.textbbox((0, 0), text, font=font)
     return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-
 def draw_detections(image, detections, class_colors=None):
     if isinstance(image, np.ndarray):
         image = Image.fromarray(image)
 
     # 尝试加载字体(使用系统默认字体)
-    try:
-        font = ImageFont.truetype("arial.ttf", 12)
-    except:
-        font = ImageFont.load_default()
-
+    font = ImageFont.load_default()
     draw = ImageDraw.Draw(image)
 
     # 默认颜色映射
@@ -38,11 +33,9 @@ def draw_detections(image, detections, class_colors=None):
         color = class_colors.get(class_name, (255, 0, 0))
 
         # 绘制边界框
-        draw.rectangle(box, outline=color, width=2)
-
+        draw.rectangle(box, outline=color, width=5)
         # 构建标签文本
         label = f"{class_name} {confidence:.2f}"
-
         # 获取文本尺寸
         text_width, text_height = get_text_size(draw, label, font)
 

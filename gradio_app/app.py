@@ -7,8 +7,8 @@ from pathlib import Path
 import gradio as gr
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torchvision.transforms as transforms
+import tkinter as tk
 from PIL import Image
 from gradio_app.layouts.header import create_header
 from gradio_app.layouts.input_panel import create_input_panel
@@ -25,41 +25,12 @@ from core.visualize import draw_detections
 # 在创建Blocks前加载主题
 theme = load_theme()
 
-model = EmotionDetector("../models/yolov8n-emo.pt")
+model = EmotionDetector("../models/yolov8s-emo.pt")
 state_manager = StateManager()
 # 初始化摄像头处理器
 camera_processor = CameraProcessor()
 #初始化性能监控组件
 perf_monitor = PerformanceMonitor()
-
-def get_screen_size():
-    """跨平台获取屏幕尺寸的替代方案"""
-    try:
-        # Windows系统
-        if os.name == 'nt':
-            import ctypes
-            user32 = ctypes.windll.user32
-            return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-
-        # Linux系统 (需要xlib)
-        elif os.name == 'posix':
-            from Xlib import display
-            d = display.Display().screen()
-            return d.width_in_pixels, d.height_in_pixels
-
-        # MacOS替代方案
-        else:
-            # 使用tkinter作为跨平台后备方案
-            import tkinter as tk
-            root = tk.Tk()
-            width = root.winfo_screenwidth()
-            height = root.winfo_screenheight()
-            root.destroy()
-            return width, height
-
-    except Exception:
-        # 默认返回常见分辨率
-        return 1920, 1080
 
 def analyze_image(image_path):
     try:
@@ -138,7 +109,7 @@ def analyze_camera(frame, state_manager):
     finally:
             perf_monitor.end_frame()
 
-# 新增性能更新回调
+#性能更新回调
 def update_perf():
     current_fps = perf_monitor.fps
     cpu = perf_monitor.cpu_usage
@@ -205,7 +176,7 @@ def run_app():
             queue=True  # 添加队列控制
         )
 
-        # 新增性能数据轮询
+        # 性能数据轮询
         demo.load(
             fn=update_perf,
             inputs=None,
@@ -213,7 +184,7 @@ def run_app():
                 output_components["fps_display"],
                 output_components["ram_usage"]
             ],
-            every=1  # 1秒刷新频率
+            every=0.1 # 1秒刷新频率
         )
         # 实时分析回调
         input_components["camera_output"].change(

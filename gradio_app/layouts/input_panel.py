@@ -1,6 +1,5 @@
 import gradio as gr
 
-
 def create_input_panel():
     with gr.Tab("📁 输入方式", elem_classes=["input-tab"]):
         with gr.Tab("🖼️ 图片"):

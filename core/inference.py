@@ -1,6 +1,7 @@
 import torch
 from ultralytics import YOLO
 from tqdm import tqdm
+import numpy as np
 import cv2
 import os
 import sys
@@ -22,8 +23,6 @@ class EmotionDetector:
             {torch.nn.Conv2d, torch.nn.Linear},  # 量化关键层
             dtype=torch.qint8
         ).to(device)
-
-        # 保持与原YOLO类的兼容
         self.model = original_model
         self.model.model = self.quantized_model
         self.model.to(device)
@@ -35,24 +34,25 @@ class EmotionDetector:
         preprocessed, padding_info = preprocess_image(image)
         tensor = torch.from_numpy(preprocessed).unsqueeze(0).to(self.device)
 
-        # 执行推理
         with torch.no_grad():
-            results = self.model(tensor)
+            results = self.model(tensor)  # 保持原始结果对象
 
-        # 调整坐标到原始图像空间
+        print(f"原始输出box数量: {len(results[0].boxes)}")
+        print(f"原始输出置信度: {results[0].boxes.conf if results[0].boxes else '无'}")
         return self._adjust_coordinates(results[0], padding_info)
 
     def _adjust_coordinates(self, result, padding_info):
-        """调整检测框到原始图像坐标系"""
         scale, left_pad, top_pad = padding_info
-        for box in result.boxes.xyxy:
-            # 去除填充影响
-            box[0] = (box[0] - left_pad) / scale  # x1
-            box[1] = (box[1] - top_pad) / scale  # y1
-            box[2] = (box[2] - left_pad) / scale  # x2
-            box[3] = (box[3] - top_pad) / scale  # y2
-        return result
+        # 强制转换为numpy数组以保证类型统一
+        original_boxes = result.boxes.xyxy.cpu().numpy().astype(np.float32)
+        # Numpy向量化运算调整坐标（不操作原张量）
+        adjusted = original_boxes.copy()
+        adjusted[:, 0::2] -= left_pad
+        adjusted[:, 1::2] -= top_pad
+        adjusted /= scale
 
+        setattr(result, 'adjusted_coords', adjusted.astype(np.float32))  # 显式类型声明
+        return result
 
     def process_video(self, video_path, output_path=None, fps=24):
         cap = cv2.VideoCapture(video_path)

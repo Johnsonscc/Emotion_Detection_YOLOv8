@@ -1,10 +1,12 @@
 import cv2
 import numpy as np
 
-def process_detection_results(results, conf_threshold=0.1):
+def process_detection_results(results, conf_threshold=0.4):
 
     # 解包数据并进行设备转换
-    boxes = results.boxes.xyxy.cpu().numpy() if results.boxes else []
+    boxes = results.adjusted_coords if hasattr(results, 'adjusted_coords') else (
+        results.boxes.xyxy.cpu().numpy() if results.boxes else []
+    )
     confs = results.boxes.conf.cpu().numpy() if results.boxes else []
     class_ids = results.boxes.cls.cpu().numpy().astype(int) if results.boxes else []
 

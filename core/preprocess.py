@@ -1,49 +1,55 @@
 import cv2
 import numpy as np
-import os
-import datetime
+from pathlib import Path
 
-def dynamic_resize_pad(image, target_size=640, pad_color=(114, 114, 114)):
-    """动态调整尺寸并保持宽高比，添加边缘填充"""
+def validate_image(image):
+    """输入验证和基本转换"""
+    if isinstance(image, (str, Path)):
+        image = cv2.imread(str(image))
+        if image is None:
+            raise ValueError(f"无法读取图像文件: {image}")
+    elif not isinstance(image, np.ndarray):
+        raise TypeError("输入必须是文件路径或numpy数组")
+
+    # 确保3通道(BGR或RGB)
+    if len(image.shape) != 3 or image.shape[2] != 3:
+        raise ValueError("需3通道图像(H,W,C)")
+    return image
+
+
+def dynamic_resize_pad(image, target_size=640):
+
     h, w = image.shape[:2]
-    print(f"原始尺寸: {w}x{h}")  # 调试用
     scale = min(target_size / h, target_size / w)
     new_h, new_w = int(h * scale), int(w * scale)
 
-    # 缩放图像
-    resized = cv2.resize(image, (new_w, new_h))
+    # 尺寸调整（优化插值方式）
+    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+    resized = cv2.resize(image, (new_w, new_h), interpolation=interpolation)
 
-    # 创建目标画布
-    padded = np.full((target_size, target_size, 3), pad_color, dtype=np.uint8)
+    # 颜色空间转换（强制BGR->RGB）
+    resized_rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
-    # 计算填充位置
-    top = (target_size - new_h) // 2
-    left = (target_size - new_w) // 2
-    padded[top:top + new_h, left:left + new_w] = resized
+    # 中心填充
+    padded = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+    pad_top = (target_size - new_h) // 2
+    pad_left = (target_size - new_w) // 2
+    padded[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = resized_rgb
 
-    print(f"缩放后尺寸: {new_w}x{new_h} | 填充后尺寸: {target_size}x{target_size}")
-    return padded, (scale, (left, top))
-
-
-# 调整归一化逻辑（原代码有错误）
-def torch_normalize(image):
-    """PyTorch标准化处理 (修复像素值缩放错误)"""
-    image = image.astype(np.float32) / 255.0#缩放
-    mean = np.array([0.406, 0.456, 0.485], dtype=np.float32) * 255  # 转换为像素值范围
-    std = np.array([0.225, 0.224, 0.229], dtype=np.float32) * 255  # 转换为像素值范围
-    return (image - mean) / std  # 基于OpenCV的BGR格式处理
+    return padded, (scale, pad_left, pad_top)
 
 
 def preprocess_image(image, target_size=640):
-    # 统一输入格式
-    if isinstance(image, str):
-        image = cv2.imread(image)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    elif isinstance(image, np.ndarray):
-        if image.shape[-1] == 4:  # 处理RGBA格式
-            image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
+    """主预处理入口"""
+    # 输入验证
+    image = validate_image(image)
 
-    # 执行预处理流程
-    processed, (scale, (left_pad, top_pad)) = dynamic_resize_pad(image, target_size)
-    normalized = torch_normalize(processed)
-    return np.transpose(normalized, (2, 0, 1)), (scale, left_pad, top_pad)  # CHW格式
+    # 执行核心处理
+    processed, meta = dynamic_resize_pad(image, target_size)
+
+    # 数值标准化和维度转换
+    normalized = processed.astype(np.float32) / 255.0  # [0,1]范围
+    channel_first = np.transpose(normalized, (2, 0, 1))  # HWC -> CHW
+
+    return channel_first, meta
+

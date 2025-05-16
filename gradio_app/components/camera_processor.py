@@ -9,9 +9,8 @@ class CameraProcessor:
         self.latest_frame = None
         self.lock = threading.Lock()
         self.mirror_mode = True  # 初始状态（True为镜像模式）
-        self.frame_buffer = []  # 新增缓冲队列
-        self.buffer_size = 8 # 匹配MPS最优批大小
 
+    # 启动摄像头采集线程
     def start_camera(self):
         if self.capture is None:
             self.capture = cv2.VideoCapture(0)
@@ -24,6 +23,7 @@ class CameraProcessor:
             return "摄像头已开启"
         return "摄像头已在运行中"
 
+    # 创建并启动帧读取守护线程
     def _start_frame_reader(self):
         def reader():
             while self.running:
@@ -35,7 +35,7 @@ class CameraProcessor:
 
         thread = threading.Thread(target=reader, daemon=True)
         thread.start()
-
+    #获取当前处理后的摄像头帧
     def get_camera_frame(self):
         if not self.running or self.latest_frame is None:
             return None
@@ -44,13 +44,8 @@ class CameraProcessor:
             # 保持原始镜像处理不变
             frame = cv2.flip(self.latest_frame, 1) if self.mirror_mode else self.latest_frame.copy()
 
-            # 自动填充缓冲队列
-            self.frame_buffer.append(frame)
-            if len(self.frame_buffer) > self.buffer_size:
-                self.frame_buffer.pop(0)
-
             return frame
-
+    #安全停止摄像头采集并释放资源
     def stop_camera(self):
         self.running = False
         if self.capture is not None:
