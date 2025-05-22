@@ -8,7 +8,7 @@ class PerformanceMonitor:
         self.time_queue = deque(maxlen=window_size)
         self.process = psutil.Process()
         self.frame_count = 0
-        self._frame_start = None  # 使用私有变量替代
+        self._frame_start = None
 
     def start_frame(self):
         self._frame_start = time.perf_counter()  # 强制重置时间戳

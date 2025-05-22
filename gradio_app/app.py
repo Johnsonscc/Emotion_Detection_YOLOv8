@@ -7,8 +7,6 @@ from pathlib import Path
 import gradio as gr
 import numpy as np
 import torch
-import torchvision.transforms as transforms
-import tkinter as tk
 from PIL import Image
 from gradio_app.layouts.header import create_header
 from gradio_app.layouts.input_panel import create_input_panel
@@ -113,7 +111,6 @@ def analyze_camera(frame, state_manager):
 def update_perf():
     current_fps = perf_monitor.fps
     cpu = perf_monitor.cpu_usage
-    queue_len = len(perf_monitor.time_queue)
 
     return f"{current_fps:.2f} FPS", f"{cpu:.1f}%"
 
